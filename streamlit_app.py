@@ -6,69 +6,73 @@ import time
 from datetime import datetime
 import os
 
-# Page configuration
-st.set_page_config(
-    page_title="IP Webcam Viewer",
-    page_icon="📸",
-    layout="wide"
-)
-
-# Custom CSS
-st.markdown("""
-    <style>
-    .stButton > button {
-        width: 100%;
-        margin-bottom: 10px;
-    }
-    .reportview-container {
-        margin-top: -2em;
-    }
-    .css-1v0mbdj.etr89bj1 {
-        margin-top: -60px;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
 class IPWebcamViewer:
     def __init__(self):
-        self.default_ip = "http://192.168.10.25:8080"
+        # Initialize Streamlit page configuration
+        st.set_page_config(
+            page_title="IP Webcam Viewer",
+            page_icon="📸",
+            layout="wide"
+        )
+        
+        # Add custom CSS
+        st.markdown("""
+            <style>
+            .stButton > button {
+                width: 200px;
+            }
+            .reportview-container {
+                margin-top: -2em;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+        
+        # Initialize variables
+        self.default_url = "http://192.168.10.25:8080"
         self.frame_placeholder = None
         self.status_placeholder = None
-        self.current_frame = None
         self.is_running = False
+        self.current_frame = None
 
-    def check_camera_connection(self, ip_address):
+    def test_connection(self, url):
+        """Test connection to IP Webcam"""
         try:
-            response = requests.get(f"{ip_address}/status.json", timeout=5)
+            response = requests.get(url, timeout=5)
             return response.status_code == 200
         except:
             return False
 
-    def capture_frame(self, ip_address):
+    def capture_frame(self, url):
+        """Capture a single frame from IP Webcam"""
         try:
-            response = requests.get(f"{ip_address}/shot.jpg", timeout=5)
+            response = requests.get(f"{url}/shot.jpg", timeout=5)
             img_array = np.array(bytearray(response.content), dtype=np.uint8)
             frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
             if frame is not None:
                 return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         except Exception as e:
-            st.error(f"Error capturing frame: {e}")
-        return None
+            st.error(f"Frame capture error: {e}")
+            return None
 
     def save_snapshot(self, frame):
+        """Save a snapshot of the current frame"""
         if frame is not None:
-            # Create 'snapshots' directory if it doesn't exist
-            os.makedirs('snapshots', exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"snapshots/snapshot_{timestamp}.jpg"
-            cv2.imwrite(filename, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-            return filename
+            try:
+                os.makedirs('snapshots', exist_ok=True)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filepath = f"snapshots/snapshot_{timestamp}.jpg"
+                cv2.imwrite(filepath, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+                return filepath
+            except Exception as e:
+                st.error(f"Error saving snapshot: {e}")
+                return None
         return None
 
-    def main(self):
+    def run(self):
+        """Main application loop"""
         st.title("📸 IP Webcam Viewer")
 
-        # Create two columns
+        # Create main layout
         col1, col2 = st.columns([3, 1])
 
         with col1:
@@ -77,70 +81,83 @@ class IPWebcamViewer:
             self.status_placeholder = st.empty()
 
         with col2:
-            # Controls sidebar
+            # Control panel
             st.sidebar.header("Camera Controls")
             
-            # IP address input
-            ip_address = st.sidebar.text_input(
-                "Camera IP Address",
-                value=self.default_ip,
-                help="Enter the IP address shown in your IP Webcam app"
+            # Camera URL input
+            camera_url = st.sidebar.text_input(
+                "Camera URL",
+                value=self.default_url,
+                help="Enter the IP Webcam URL"
             )
 
-            # Connection check
+            # Connection test
             if st.sidebar.button("Test Connection"):
-                if self.check_camera_connection(ip_address):
-                    st.sidebar.success("✅ Camera connected!")
+                if self.test_connection(camera_url):
+                    st.sidebar.success("✅ Connected to camera!")
                 else:
-                    st.sidebar.error("❌ Cannot connect to camera")
+                    st.sidebar.error("❌ Connection failed")
 
-            # Stream quality
+            # Quality control
             quality = st.sidebar.select_slider(
                 "Stream Quality",
                 options=["Low", "Medium", "High"],
                 value="Medium"
             )
 
-            # Frame rate
+            # Frame rate control
             fps = st.sidebar.slider("Frame Rate (FPS)", 1, 30, 10)
 
             # Control buttons
-            start_button = st.sidebar.button("▶️ Start Stream")
-            stop_button = st.sidebar.button("⏹️ Stop Stream")
-            snapshot_button = st.sidebar.button("📸 Take Snapshot")
+            col1, col2 = st.sidebar.columns(2)
+            start = col1.button("Start Stream")
+            stop = col2.button("Stop Stream")
+            
+            # Snapshot button
+            if st.sidebar.button("Take Snapshot"):
+                if self.current_frame is not None:
+                    filepath = self.save_snapshot(self.current_frame)
+                    if filepath:
+                        st.sidebar.success(f"Saved: {filepath}")
 
-            # Display stream stats
+            # Statistics display
             st.sidebar.markdown("---")
-            st.sidebar.markdown("### Stream Statistics")
+            st.sidebar.markdown("### Statistics")
             stats_placeholder = st.sidebar.empty()
 
-        # Main streaming logic
-        if start_button:
+        # Main streaming loop
+        if start:
             self.is_running = True
             frames_count = 0
             start_time = time.time()
 
-            while self.is_running and not stop_button:
+            while self.is_running and not stop:
                 # Capture frame
-                frame = self.capture_frame(ip_address)
+                frame = self.capture_frame(camera_url)
                 
                 if frame is not None:
-                    # Resize based on quality setting
+                    # Apply quality settings
                     height, width = frame.shape[:2]
                     if quality == "Low":
                         frame = cv2.resize(frame, (width//2, height//2))
                     elif quality == "High":
                         frame = cv2.resize(frame, (width*2, height*2))
 
-                    # Update display
+                    # Store current frame
                     self.current_frame = frame
-                    self.frame_placeholder.image(frame, channels="RGB", use_column_width=True)
                     
+                    # Display frame
+                    self.frame_placeholder.image(
+                        frame,
+                        channels="RGB",
+                        use_column_width=True
+                    )
+
                     # Update statistics
                     frames_count += 1
                     elapsed_time = time.time() - start_time
                     current_fps = frames_count / elapsed_time
-                    
+
                     stats_placeholder.markdown(f"""
                         - Runtime: {elapsed_time:.1f}s
                         - Frames: {frames_count}
@@ -154,16 +171,8 @@ class IPWebcamViewer:
                     break
 
             self.is_running = False
-            st.sidebar.warning("Stream stopped")
-
-        # Handle snapshot
-        if snapshot_button and self.current_frame is not None:
-            filename = self.save_snapshot(self.current_frame)
-            if filename:
-                st.sidebar.success(f"Snapshot saved: {filename}")
-            else:
-                st.sidebar.error("Failed to save snapshot")
+            st.warning("Stream stopped")
 
 if __name__ == "__main__":
     viewer = IPWebcamViewer()
-    viewer.main()
+    viewer.run()
