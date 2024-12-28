@@ -88,7 +88,7 @@ def main():
     # Camera URL input
     camera_url = st.text_input(
         "IP Camera URL",
-        value="http://192.168.10.25:8080",
+        value="http://192.168.10.38:8080/video",
         help="Enter the URL shown in your IP Webcam app"
     )
 
