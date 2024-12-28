@@ -25,7 +25,7 @@ def main():
         while not stop:
             try:
                 # Get single frame as JPEG
-                response = requests.get("http://192.168.10.38:8080/shot.jpg", timeout=5)
+                response = requests.get("http://192.168.10.38:8080/video", timeout=5)
                 
                 if response.status_code == 200:
                     # Convert image from bytes to numpy array
