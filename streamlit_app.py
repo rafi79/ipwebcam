@@ -1,34 +1,35 @@
 import streamlit as st
 import cv2
+import imutils
+from imutils.video import VideoStream
+from PIL import Image
 import numpy as np
 
-# Replace this with your IP webcam URL
-ip_camera_url = "http://192.168.10.38:8080/video"
+# Function to fetch the frame from the IP webcam
+def get_frame(camera_url):
+    vs = VideoStream(src=camera_url).start()
+    while True:
+        frame = vs.read()
+        if frame is not None:
+            frame = imutils.resize(frame, width=600)
+            yield frame
 
-st.title("IP Webcam Stream in Streamlit")
+# Streamlit app
+def main():
+    st.title("IP Webcam Viewer")
 
-# Function to fetch and display frames
-def get_frame_from_ip_camera():
-    cap = cv2.VideoCapture(ip_camera_url)  # Open the IP camera stream
+    # Input for the IP webcam URL
+    camera_url = st.text_input("Enter the IP webcam URL", "http://192.168.10.38:8080/video")
 
-    if not cap.isOpened():
-        st.error("Error: Unable to access the video stream. Please check the URL or your network.")
-        return None
+    if st.button("Start"):
+        stframe = st.empty()
+        for frame in get_frame(camera_url):
+            # Convert the frame to RGB
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # Convert the frame to PIL Image
+            pil_image = Image.fromarray(frame_rgb)
+            # Display the frame in Streamlit
+            stframe.image(pil_image)
 
-    ret, frame = cap.read()
-    cap.release()
-
-    if ret:
-        # Convert the frame from BGR (OpenCV default) to RGB (Streamlit compatible)
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        return frame
-    else:
-        st.error("Error: Unable to fetch video frame. Stream might be down.")
-        return None
-
-# Display the video feed
-st.text("Displaying the live feed from the IP webcam...")
-frame = get_frame_from_ip_camera()
-
-if frame is not None:
-    st.image(frame, caption="Live Webcam Feed", use_column_width=True)
+if __name__ == "__main__":
+    main()
