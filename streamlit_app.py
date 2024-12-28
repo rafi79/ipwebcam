@@ -13,6 +13,9 @@ def get_frame(camera_url):
         if frame is not None:
             frame = imutils.resize(frame, width=600)
             yield frame
+        else:
+            st.error("Failed to capture frame from the IP webcam.")
+            break
 
 # Streamlit app
 def main():
@@ -23,13 +26,16 @@ def main():
 
     if st.button("Start"):
         stframe = st.empty()
-        for frame in get_frame(camera_url):
-            # Convert the frame to RGB
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            # Convert the frame to PIL Image
-            pil_image = Image.fromarray(frame_rgb)
-            # Display the frame in Streamlit
-            stframe.image(pil_image)
+        try:
+            for frame in get_frame(camera_url):
+                # Convert the frame to RGB
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                # Convert the frame to PIL Image
+                pil_image = Image.fromarray(frame_rgb)
+                # Display the frame in Streamlit
+                stframe.image(pil_image)
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
 
 if __name__ == "__main__":
     main()
