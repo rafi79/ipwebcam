@@ -6,51 +6,60 @@ import time
 def main():
     st.title("IP Webcam Stream")
     
-    # URL input for IP webcam
-    url = st.text_input(
+    # Input for IP address
+    ip_address = st.text_input(
         "IP Webcam URL",
         value="http://192.168.10.38:8080",
-        help="Enter the URL from your IP Webcam app"
+        help="Enter the URL shown in your IP Webcam app"
     )
-    
-    # Create video capture object
-    if st.button("Start Stream"):
+
+    # Create placeholders for video and status
+    frame_placeholder = st.empty()
+    status_placeholder = st.empty()
+
+    # Control buttons in columns
+    col1, col2 = st.columns(2)
+    start_button = col1.button('Start Camera')
+    stop_button = col2.button('Stop Camera')
+
+    if start_button:
+        # Construct the exact video URL that IP Webcam uses
+        video_url = f"{ip_address}/videofeed"
+        status_placeholder.info(f"Connecting to: {video_url}")
+
         try:
-            # Construct video URL - this is the direct video feed from IP Webcam
-            video_url = f"{url}/video"
-            st.info(f"Connecting to: {video_url}")
-            
-            # Create OpenCV video capture object
+            # Open video capture
             cap = cv2.VideoCapture(video_url)
             
             if not cap.isOpened():
-                st.error("Could not open video stream")
-                return
+                # Try alternative URL format
+                video_url2 = f"{ip_address}/video"
+                status_placeholder.info(f"Retrying with: {video_url2}")
+                cap = cv2.VideoCapture(video_url2)
                 
-            # Create a placeholder for the video frame
-            frame_placeholder = st.empty()
-            
-            # Add stop button
-            stop = st.button("Stop Stream")
-            
-            while not stop:
+                if not cap.isOpened():
+                    status_placeholder.error("Could not connect to camera stream")
+                    return
+
+            status_placeholder.success("Connected to camera!")
+
+            while not stop_button:
                 ret, frame = cap.read()
                 if ret:
                     # Convert BGR to RGB
-                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     # Display the frame
-                    frame_placeholder.image(frame)
-                    # Add a small delay
-                    time.sleep(0.1)
+                    frame_placeholder.image(frame_rgb)
+                    time.sleep(0.1)  # Small delay
                 else:
-                    st.error("Error reading frame")
+                    status_placeholder.warning("No frame received")
                     break
-                    
+
             cap.release()
-            st.warning("Stream stopped")
+            status_placeholder.warning("Stream stopped")
             
         except Exception as e:
-            st.error(f"Error: {str(e)}")
-
+            status_placeholder.error(f"Error: {str(e)}")
+            
 if __name__ == "__main__":
     main()
