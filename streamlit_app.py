@@ -1,90 +1,78 @@
 import streamlit as st
+import av
 import cv2
-import time
-import requests
-from datetime import datetime
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
+import numpy as np
 
-def check_camera_connection(url):
-    try:
-        response = requests.get(url, timeout=5)
-        return response.status_code == 200
-    except:
-        return False
+class VideoProcessor(VideoProcessorBase):
+    def __init__(self):
+        self.ip_camera = cv2.VideoCapture("http://192.168.10.25:8080/video")
+
+    def recv(self, frame):
+        ret, frame = self.ip_camera.read()
+        if ret:
+            return av.VideoFrame.from_ndarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        else:
+            return None
+
+    def __del__(self):
+        if self.ip_camera is not None:
+            self.ip_camera.release()
 
 def main():
-    st.title('Mobile Camera Stream')
-
-    # Input for IP address
-    camera_ip = st.text_input(
-        "Enter IP Webcam Address",
+    st.title("IP Webcam WebRTC Stream")
+    
+    # Camera URL input
+    camera_url = st.text_input(
+        "IP Camera URL",
         value="http://192.168.10.38:8080/video",
-        help="Enter the complete URL shown in your IP Webcam app"
+        help="Enter the complete URL from your IP Webcam app"
     )
 
-    # Test connection button
-    if st.button("Test Connection"):
-        if check_camera_connection(camera_ip):
-            st.success("✅ Successfully connected to camera!")
-        else:
-            st.error("❌ Could not connect to camera. Please check the IP address and make sure the IP Webcam app is running.")
-            return
+    # WebRTC Configuration
+    rtc_configuration = RTCConfiguration(
+        {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+    )
 
-    # Create buttons
-    col1, col2, col3 = st.columns(3)
-    start_button = col1.button('Start Stream')
-    take_picture_button = col2.button('Take Picture')
-    stop_button = col3.button('Stop')
+    # Create the WebRTC streamer
+    webrtc_ctx = webrtc_streamer(
+        key="ip-camera",
+        video_processor_factory=VideoProcessor,
+        rtc_configuration=rtc_configuration,
+        media_stream_constraints={
+            "video": True,
+            "audio": False
+        }
+    )
 
-    # Create a placeholder for the video frame
-    frame_window = st.empty()
+    # Add some instructions
+    st.markdown("""
+    ### Instructions:
+    1. Make sure IP Webcam app is running on your phone
+    2. Enter the correct camera URL above
+    3. Click 'Start' to begin streaming
+    
+    ### Troubleshooting:
+    - Verify you can access the camera URL in your browser
+    - Make sure both devices are on the same network
+    - Check if the IP Webcam app shows 'Server running'
+    """)
 
-    if start_button:
+    # Display status
+    if webrtc_ctx.video_processor:
+        st.success("Stream is active")
+    
+    # Add a snapshot button
+    if webrtc_ctx.video_receiver and st.button("Take Snapshot"):
         try:
-            # Initialize video capture with the provided IP
-            video_url = f"{camera_ip}/video"
-            st.info(f"Connecting to: {video_url}")
-            
-            vid = cv2.VideoCapture(video_url)
-            
-            if not vid.isOpened():
-                st.error("Failed to open video stream")
-                return
-
-            st.success("Stream started!")
-
-            while not stop_button:
-                got_frame, frame = vid.read()
-                
-                if got_frame:
-                    # Convert BGR to RGB
-                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    
-                    # Display the frame
-                    frame_window.image(frame_rgb)
-                    
-                    # Handle picture taking
-                    if take_picture_button:
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        filename = f"captured_image_{timestamp}.jpg"
-                        cv2.imwrite(filename, frame)
-                        st.success(f"Picture saved as {filename}")
-                        break
-                    
-                    # Small delay to prevent high CPU usage
-                    time.sleep(0.1)
-                else:
-                    st.warning("No frame received")
-                    break
-
+            frame = webrtc_ctx.video_receiver.get_frame()
+            if frame is not None:
+                # Save the snapshot
+                img = frame.to_ndarray(format="bgr24")
+                cv2.imwrite("snapshot.jpg", img)
+                st.success("Snapshot saved as snapshot.jpg")
         except Exception as e:
-            st.error(f"Error: {str(e)}")
-
-        finally:
-            try:
-                vid.release()
-            except:
-                pass
-            st.warning("Stream stopped")
+            st.error(f"Failed to take snapshot: {str(e)}")
 
 if __name__ == "__main__":
     main()
